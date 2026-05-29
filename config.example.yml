@@ -1,0 +1,23 @@
+# Heimdall — OAuth 2.1 gateway config
+# Mounted at /etc/heimdall/config.yml in the container.
+# Secrets (GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, JWT_SECRET) come from env, never here.
+
+issuer: https://heimdall.exe.pm
+
+github:
+  login_allowlist:
+    - kschmidtlarsen
+
+jwt:
+  # access-token lifetime in seconds (15 min)
+  ttl_seconds: 900
+
+# Public hostname → upstream MCP container on Bifrost network.
+# Adding a new MCP = one entry here + matching Cloudflare DNS + Tunnel ingress rule.
+mcps:
+  cos-mcp.exe.pm:
+    upstream: http://cos-mcp:8080
+    description: "Chief of Staff CRM (read-only)"
+  kanban-mcp.exe.pm:
+    upstream: http://kanban-mcp:8080
+    description: "Kanban board (currently read-only)"

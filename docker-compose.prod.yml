@@ -1,0 +1,47 @@
+# Heimdall — OAuth 2.1 gateway for the Bifrost MCP fleet.
+# Sits on Bifrost (to reach internal MCP containers by DNS) and binds host port 6115
+# (so Cloudflare Tunnel — which lives on the `bridge` network — can reach it via 192.168.0.20:6115).
+#
+# Required stack env vars in Portainer:
+#   GITHUB_CLIENT_ID      — from the heimdall GitHub OAuth App
+#   GITHUB_CLIENT_SECRET  — from the heimdall GitHub OAuth App
+#   JWT_SECRET            — 64+ random hex chars (openssl rand -hex 48)
+#
+# To change which MCPs are exposed: edit config.example.yml (which is baked into
+# the image at /etc/heimdall/config.yml) and re-publish the image — or mount a
+# custom config.yml over it via /mnt/user/appdata/heimdall/config.yml (commented
+# out below for now).
+
+networks:
+  bifrost:
+    external: true
+
+services:
+  heimdall:
+    image: ghcr.io/kschmidtlarsen/heimdall:latest
+    container_name: heimdall
+    restart: unless-stopped
+    ports:
+      - "6115:8080"
+    environment:
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+      JWT_SECRET: ${JWT_SECRET}
+      CONFIG_PATH: /etc/heimdall/config.yml
+    # volumes:
+    #   - /mnt/user/appdata/heimdall/config.yml:/etc/heimdall/config.yml:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 192M
+    networks:
+      - bifrost
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"

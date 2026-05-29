@@ -1,0 +1,42 @@
+{
+  "name": "@kschmidtlarsen/heimdall",
+  "version": "0.1.0",
+  "description": "OAuth 2.1 PKCE gateway for the Bifrost MCP fleet — Authorization Server + per-MCP resource-server proxy",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "start": "node dist/index.js",
+    "dev": "node --watch --import tsx src/index.ts"
+  },
+  "keywords": [
+    "mcp",
+    "oauth",
+    "oauth-2.1",
+    "pkce",
+    "gateway",
+    "authorization-server"
+  ],
+  "author": "Kristian Schmidt-Larsen",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kschmidtlarsen/heimdall"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "dependencies": {
+    "express": "^4.21.2",
+    "jose": "^5.9.6",
+    "yaml": "^2.6.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
