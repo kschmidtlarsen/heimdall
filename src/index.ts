@@ -23,9 +23,11 @@ app.use((req, _res, next) => {
   req.on("error", next);
 });
 
-// Parsers for AS endpoints. Skipped on /mcp (handled above).
-app.use(express.json({ limit: "1mb" }));
-app.use(express.urlencoded({ extended: false }));
+// Parsers for AS endpoints. Skipped on /mcp (handled above) — the stream is already drained.
+const json = express.json({ limit: "1mb" });
+const form = express.urlencoded({ extended: false });
+app.use((req, res, next) => (req.path === "/mcp" ? next() : json(req, res, next)));
+app.use((req, res, next) => (req.path === "/mcp" ? next() : form(req, res, next)));
 
 // Health (no host gating — used by Docker healthcheck inside the container)
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
