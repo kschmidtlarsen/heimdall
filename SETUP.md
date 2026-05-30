@@ -1,6 +1,6 @@
 # Heimdall — First-time setup
 
-Step-by-step to bring heimdall online and connect Claude Desktop to the first two MCPs (`cos-mcp`, `kanban-mcp`). Estimated time: ~15 min of your work plus build/deploy.
+Step-by-step to bring heimdall online and connect Claude Desktop to the first two MCPs (`cos-mcp`, `kanban-mcp`). Single hostname (`heimdall.exe.pm`) — path-based routing for each MCP.
 
 ## 1. Register the GitHub OAuth App  *(you)*
 
@@ -20,27 +20,23 @@ Click **Register application**. On the next page, click **Generate a new client 
 
 ## 2. Cloudflare DNS  *(you)*
 
-In the Cloudflare dashboard for `exe.pm`, add three CNAME records (or A records pointing at the tunnel — whichever pattern your existing `*.exe.pm` hostnames use). Each should resolve to your existing Cloudflare Tunnel.
+In the Cloudflare dashboard for `exe.pm`, add **one** CNAME record (or A record pointing at the tunnel — whichever pattern your existing `*.exe.pm` hostnames use):
 
 | Hostname | Target |
 |---|---|
-| `heimdall.exe.pm` | same as `kanban.exe.pm` etc. |
-| `cos-mcp.exe.pm` | same |
-| `kanban-mcp.exe.pm` | same |
+| `heimdall.exe.pm` | same as `kanban.exe.pm` etc. (your existing Cloudflare Tunnel) |
 
 Cloudflare proxy: **on** (orange cloud). TLS: full / strict per existing convention.
 
 ## 3. Cloudflare Tunnel ingress  *(you)*
 
-Cloudflare → **Zero Trust → Networks → Tunnels → [your tunnel] → Public Hostnames**. Add three:
+Cloudflare → **Zero Trust → Networks → Tunnels → [your tunnel] → Public Hostnames**. Add one:
 
 | Subdomain | Domain | Path | Service |
 |---|---|---|---|
 | `heimdall` | `exe.pm` | (blank) | `http://192.168.0.20:6115` |
-| `cos-mcp` | `exe.pm` | (blank) | `http://192.168.0.20:6115` |
-| `kanban-mcp` | `exe.pm` | (blank) | `http://192.168.0.20:6115` |
 
-**Important:** do **not** add a Cloudflare Access policy to any of these. The OAuth handshake is inside heimdall; Access SSO in front would break it.
+**Important:** if your default `*.exe.pm` policy enforces Cloudflare Access, add a **bypass policy** for `heimdall.exe.pm` (allow everyone, all paths). The OAuth handshake is inside heimdall; Access SSO in front would break it.
 
 ## 4. Generate a JWT signing secret  *(you, one-liner)*
 
@@ -54,12 +50,10 @@ Save the output for the `JWT_SECRET` env var.
 
 ```
 cd /websites/heimdall
-git init && git remote add origin https://github.com/kschmidtlarsen/heimdall.git
-git add -A && git commit -m "Initial heimdall — OAuth 2.1 gateway for the Bifrost MCP fleet"
-git push -u origin main
+git push origin main
 ```
 
-GitHub Actions builds and publishes `ghcr.io/kschmidtlarsen/heimdall:latest` (~3 min).
+GitHub Actions builds and publishes `ghcr.io/kschmidtlarsen/heimdall:latest` (~1 min).
 
 ## 6. Create the Portainer stack  *(me, via Portainer MCP)*
 
@@ -86,14 +80,14 @@ Update kanban-mcp stack (76) env: `KANBAN_WRITE_ENABLED=false`. Redeploy.
 curl -s https://heimdall.exe.pm/.well-known/oauth-authorization-server | jq .
 
 # Resource metadata per MCP
-curl -s https://cos-mcp.exe.pm/.well-known/oauth-protected-resource | jq .
-curl -s https://kanban-mcp.exe.pm/.well-known/oauth-protected-resource | jq .
+curl -s https://heimdall.exe.pm/.well-known/oauth-protected-resource/cos-mcp | jq .
+curl -s https://heimdall.exe.pm/.well-known/oauth-protected-resource/kanban-mcp | jq .
 
 # Unauthenticated hit returns 401 with WWW-Authenticate
-curl -i https://cos-mcp.exe.pm/mcp
+curl -i https://heimdall.exe.pm/cos-mcp/mcp
 ```
 
-Expected: 401 with `WWW-Authenticate: Bearer resource_metadata="https://cos-mcp.exe.pm/.well-known/oauth-protected-resource"`.
+Expected: 401 with `WWW-Authenticate: Bearer resource_metadata="https://heimdall.exe.pm/.well-known/oauth-protected-resource/cos-mcp"`.
 
 ## 9. Add the connectors in Claude Desktop  *(you)*
 
@@ -101,7 +95,7 @@ Claude Desktop → **Settings → Connectors → + Add custom connector**. For e
 
 | Field | `cos-mcp` | `kanban-mcp` |
 |---|---|---|
-| URL | `https://cos-mcp.exe.pm/mcp` | `https://kanban-mcp.exe.pm/mcp` |
+| URL | `https://heimdall.exe.pm/cos-mcp/mcp` | `https://heimdall.exe.pm/kanban-mcp/mcp` |
 | Advanced settings | (leave empty — DCR handles it) | (leave empty) |
 
 Claude will:
@@ -123,7 +117,8 @@ If both work, Phase 1 is done. Tell me when you're ready to re-enable kanban wri
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | Connector stays "Connecting…" | DCR endpoint not reachable | Verify `https://heimdall.exe.pm/.well-known/oauth-authorization-server` returns JSON |
+| Browser shows Cloudflare Access login | Access policy still in front of heimdall.exe.pm | Add a bypass policy for the hostname (see step 3) |
 | `access_denied: user not allowlisted` | Signed in with a different GitHub account | Sign out of GitHub and retry, or add the login to `github.login_allowlist` |
-| `invalid_target` | The resource hostname isn't in `config.mcps` | Make sure the hostname is exactly `<name>-mcp.exe.pm` and matches the config |
+| `invalid_target` | The resource URL doesn't match any configured slug | Ensure the connector URL is `https://heimdall.exe.pm/<slug>/mcp` where `<slug>` is in `config.mcps` |
 | `bad_gateway` from /mcp after auth | Heimdall can't reach the upstream by DNS | Verify the MCP container is on the `bifrost` network |
 | Tunnel can't reach heimdall | Tunnel is on `bridge`, not Bifrost | Confirm tunnel ingress points to `http://192.168.0.20:6115` (host port), not container DNS |

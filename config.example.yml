@@ -12,12 +12,17 @@ jwt:
   # access-token lifetime in seconds (15 min)
   ttl_seconds: 900
 
-# Public hostname → upstream MCP container on Bifrost network.
-# Adding a new MCP = one entry here + matching Cloudflare DNS + Tunnel ingress rule.
+# Path slug → upstream MCP container on Bifrost network.
+# Resource identifier for slug "cos-mcp" is https://heimdall.exe.pm/cos-mcp
+# RS metadata is at https://heimdall.exe.pm/.well-known/oauth-protected-resource/cos-mcp
+# MCP endpoint Claude Desktop connects to: https://heimdall.exe.pm/cos-mcp/mcp
+#
+# Slugs MUST be lowercase, [a-z0-9-]+, and must NOT collide with reserved paths
+# (health, authorize, token, register, oauth, .well-known).
 mcps:
-  cos-mcp.exe.pm:
+  cos-mcp:
     upstream: http://cos-mcp:8080
     description: "Chief of Staff CRM (read-only)"
-  kanban-mcp.exe.pm:
+  kanban-mcp:
     upstream: http://kanban-mcp:8080
     description: "Kanban board (currently read-only)"

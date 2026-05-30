@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from "express";
-import type { HeimdallConfig, McpConfig } from "./config.js";
+import { type HeimdallConfig, type McpConfig, resourceUrl } from "./config.js";
 import { verifyAccessToken } from "./jwt.js";
 
 const HOP_BY_HOP = new Set([
@@ -18,52 +18,44 @@ const HOP_BY_HOP = new Set([
 export function proxyRouter(cfg: HeimdallConfig): Router {
   const router = Router();
 
-  // Resource-server metadata (RFC 9728)
-  router.get("/.well-known/oauth-protected-resource", (req, res) => {
-    const host = mcpHost(req);
-    if (!host || !cfg.mcps[host]) return res.status(404).send("not an MCP host");
+  // Resource-server metadata (RFC 9728 path form: /.well-known/oauth-protected-resource/<slug>)
+  router.get("/.well-known/oauth-protected-resource/:slug", (req, res) => {
+    const slug = req.params.slug;
+    const mcp = cfg.mcps[slug];
+    if (!mcp) return res.status(404).json({ error: "unknown_resource" });
     res.json({
-      resource: `https://${host}`,
+      resource: resourceUrl(cfg, slug),
       authorization_servers: [cfg.issuer],
       bearer_methods_supported: ["header"],
       scopes_supported: ["mcp"],
     });
   });
 
-  router.all("/mcp", async (req, res) => {
-    const host = mcpHost(req);
-    if (!host) return res.status(404).send("not an MCP host");
-    const mcp = cfg.mcps[host];
-    if (!mcp) return res.status(404).send(`no MCP configured for host ${host}`);
+  // MCP endpoint: /<slug>/mcp — authenticated, proxied to upstream container.
+  router.all("/:slug/mcp", async (req, res) => {
+    const slug = req.params.slug;
+    const mcp = cfg.mcps[slug];
+    if (!mcp) return res.status(404).json({ error: "unknown_resource" });
 
-    const audience = `https://${host}`;
+    const audience = resourceUrl(cfg, slug);
     const auth = req.header("authorization") ?? "";
     const m = /^Bearer\s+(.+)$/.exec(auth);
-    if (!m) return unauthorized(res, host, cfg.issuer);
+    if (!m) return unauthorized(res, cfg.issuer, slug);
 
     try {
       await verifyAccessToken(cfg, m[1], audience);
-    } catch (e) {
-      return unauthorized(res, host, cfg.issuer, "invalid_token");
+    } catch {
+      return unauthorized(res, cfg.issuer, slug, "invalid_token");
     }
 
     await proxyTo(req, res, mcp, "/mcp");
   });
 
-  // Pass-through health for the upstream (debug helper, no auth)
-  router.get("/health", (_req, res) => res.json({ status: "ok" }));
-
   return router;
 }
 
-function mcpHost(req: Request): string | undefined {
-  // Cloudflare Tunnel forwards original Host header; behind `trust proxy`, req.hostname respects X-Forwarded-Host.
-  const h = (req.header("x-forwarded-host") ?? req.header("host") ?? "").split(",")[0].trim().toLowerCase();
-  return h || undefined;
-}
-
-function unauthorized(res: Response, host: string, issuer: string, error?: string): void {
-  const resourceMeta = `https://${host}/.well-known/oauth-protected-resource`;
+function unauthorized(res: Response, issuer: string, slug: string, error?: string): void {
+  const resourceMeta = `${issuer}/.well-known/oauth-protected-resource/${slug}`;
   let header = `Bearer resource_metadata="${resourceMeta}"`;
   if (error) header += `, error="${error}"`;
   res.set("WWW-Authenticate", header);
@@ -88,7 +80,6 @@ async function proxyTo(req: Request, res: Response, mcp: McpConfig, path: string
     headers: fwdHeaders,
   };
   if (req.method !== "GET" && req.method !== "HEAD") {
-    // express.json() / express.raw() consumed the body — fall back to the raw buffer if present
     const raw = (req as Request & { rawBody?: Buffer }).rawBody;
     const bodyBuf: Buffer | undefined = raw ?? (req.body !== undefined ? Buffer.from(JSON.stringify(req.body)) : undefined);
     if (bodyBuf) {

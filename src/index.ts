@@ -11,9 +11,26 @@ const app = express();
 app.set("trust proxy", true);
 app.disable("x-powered-by");
 
-// Capture the raw body for the proxy path (so we can forward it verbatim) before parsers consume it.
+// CORS — permissive for public OAuth 2.1 client + browser-initiated MCP traffic.
+// All endpoints we expose are either public (metadata, /register, /token) or audience-bound
+// (the proxied /mcp). No cookies, no credentials — `*` is safe.
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, MCP-Protocol-Version, X-MCP-Session-Id",
+  );
+  res.setHeader("Access-Control-Expose-Headers", "WWW-Authenticate");
+  res.setHeader("Access-Control-Max-Age", "86400");
+  if (req.method === "OPTIONS") return res.status(204).end();
+  next();
+});
+
+// Capture the raw body for /:slug/mcp paths (so we can forward verbatim) before parsers consume it.
+const MCP_PATH_RE = /^\/[a-z0-9][a-z0-9-]*\/mcp\/?$/i;
 app.use((req, _res, next) => {
-  if (req.path !== "/mcp") return next();
+  if (!MCP_PATH_RE.test(req.path)) return next();
   const chunks: Buffer[] = [];
   req.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
   req.on("end", () => {
@@ -23,34 +40,24 @@ app.use((req, _res, next) => {
   req.on("error", next);
 });
 
-// Parsers for AS endpoints. Skipped on /mcp (handled above) — the stream is already drained.
+// Parsers for AS endpoints. Skipped on /:slug/mcp (handled above — the stream is already drained).
 const json = express.json({ limit: "1mb" });
 const form = express.urlencoded({ extended: false });
-app.use((req, res, next) => (req.path === "/mcp" ? next() : json(req, res, next)));
-app.use((req, res, next) => (req.path === "/mcp" ? next() : form(req, res, next)));
+app.use((req, res, next) => (MCP_PATH_RE.test(req.path) ? next() : json(req, res, next)));
+app.use((req, res, next) => (MCP_PATH_RE.test(req.path) ? next() : form(req, res, next)));
 
-// Health (no host gating — used by Docker healthcheck inside the container)
+// Health (no auth — used by Docker healthcheck inside the container)
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
-// Host-based routing: the AS lives on the issuer host; everything else is an MCP host.
-const issuerHost = new URL(cfg.issuer).host.toLowerCase();
-const knownMcpHosts = new Set(Object.keys(cfg.mcps).map((h) => h.toLowerCase()));
+// Authorization Server (root paths: /.well-known/oauth-authorization-server, /authorize, /token, /register, /oauth/...)
+app.use(authServerRouter(cfg, store));
 
-app.use((req, res, next) => {
-  const host = ((req.header("x-forwarded-host") ?? req.header("host") ?? "").split(",")[0] || "").trim().toLowerCase();
-  (req as Request & { _host?: string })._host = host;
-  if (host === issuerHost) {
-    return authServerRouter(cfg, store)(req, res, next);
-  }
-  if (knownMcpHosts.has(host)) {
-    return proxyRouter(cfg)(req, res, next);
-  }
-  return next();
-});
+// Resource Server (/.well-known/oauth-protected-resource/:slug, /:slug/mcp)
+app.use(proxyRouter(cfg));
 
 // 404 fallthrough
 app.use((req, res) => {
-  res.status(404).json({ error: "not_found", host: (req as Request & { _host?: string })._host });
+  res.status(404).json({ error: "not_found", path: req.path });
 });
 
 // Error handler

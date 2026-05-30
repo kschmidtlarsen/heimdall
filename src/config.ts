@@ -20,6 +20,17 @@ export interface HeimdallConfig {
   mcps: Record<string, McpConfig>;
 }
 
+const RESERVED_SLUGS = new Set([
+  "health",
+  "authorize",
+  "token",
+  "register",
+  "oauth",
+  ".well-known",
+  "well-known",
+]);
+const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
+
 function requireEnv(name: string): string {
   const v = process.env[name];
   if (!v) throw new Error(`Missing required env var: ${name}`);
@@ -41,9 +52,15 @@ export function loadConfig(): HeimdallConfig {
   if (!raw.mcps || Object.keys(raw.mcps).length === 0) {
     throw new Error("config.mcps must define at least one MCP");
   }
-  for (const [host, mcp] of Object.entries(raw.mcps)) {
+  for (const [slug, mcp] of Object.entries(raw.mcps)) {
+    if (!SLUG_RE.test(slug)) {
+      throw new Error(`mcps.${slug}: slug must match ${SLUG_RE} (lowercase, alphanumeric + hyphen)`);
+    }
+    if (RESERVED_SLUGS.has(slug)) {
+      throw new Error(`mcps.${slug}: slug is reserved`);
+    }
     if (!mcp.upstream?.startsWith("http://")) {
-      throw new Error(`mcps.${host}.upstream must be a http:// URL`);
+      throw new Error(`mcps.${slug}.upstream must be a http:// URL`);
     }
   }
 
@@ -60,4 +77,22 @@ export function loadConfig(): HeimdallConfig {
     },
     mcps: raw.mcps,
   };
+}
+
+/** Resource identifier for a configured MCP slug: `${issuer}/${slug}`. */
+export function resourceUrl(cfg: HeimdallConfig, slug: string): string {
+  return `${cfg.issuer}/${slug}`;
+}
+
+/** Parse a resource URL the client sent (e.g. on /authorize) and return its slug, if known. */
+export function slugFromResource(cfg: HeimdallConfig, resource: string): string | undefined {
+  try {
+    const u = new URL(resource);
+    const iss = new URL(cfg.issuer);
+    if (u.origin !== iss.origin) return undefined;
+    const slug = u.pathname.replace(/^\/+/, "").replace(/\/+$/, "");
+    return slug && cfg.mcps[slug] ? slug : undefined;
+  } catch {
+    return undefined;
+  }
 }

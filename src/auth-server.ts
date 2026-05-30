@@ -1,6 +1,6 @@
 import { randomBytes, createHash } from "node:crypto";
-import { Router, type Request, type Response } from "express";
-import type { HeimdallConfig } from "./config.js";
+import { Router, type Response } from "express";
+import { type HeimdallConfig, resourceUrl, slugFromResource } from "./config.js";
 import type { Store } from "./store.js";
 import { buildGitHubAuthorizeUrl, exchangeGitHubCode, fetchGitHubUser } from "./github.js";
 import { mintAccessToken } from "./jwt.js";
@@ -76,9 +76,11 @@ export function authServerRouter(cfg: HeimdallConfig, store: Store): Router {
     if (!code_challenge || code_challenge_method !== "S256") {
       return errorRedirect(res, redirect_uri, state, "invalid_request", "PKCE S256 required");
     }
-    if (!resource || !cfg.mcps[hostnameFromUrl(resource)]) {
+    const slug = resource ? slugFromResource(cfg, resource) : undefined;
+    if (!slug) {
       return errorRedirect(res, redirect_uri, state, "invalid_target", `unknown resource: ${resource}`);
     }
+    const canonicalResource = resourceUrl(cfg, slug);
 
     const github_state = randomBytes(24).toString("hex");
     store.saveFlow({
@@ -87,7 +89,7 @@ export function authServerRouter(cfg: HeimdallConfig, store: Store): Router {
       state: state ?? "",
       code_challenge,
       code_challenge_method: "S256",
-      resource,
+      resource: canonicalResource,
       scope,
       github_state,
       created_at: Date.now(),
@@ -174,14 +176,6 @@ export function authServerRouter(cfg: HeimdallConfig, store: Store): Router {
   });
 
   return router;
-}
-
-function hostnameFromUrl(u: string): string {
-  try {
-    return new URL(u).host;
-  } catch {
-    return "";
-  }
 }
 
 function errorRedirect(
