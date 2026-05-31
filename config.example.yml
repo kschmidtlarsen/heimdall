@@ -26,3 +26,6 @@ mcps:
   kanban-mcp:
     upstream: http://kanban-mcp:8080
     description: "Kanban board (currently read-only)"
+  muninn:
+    upstream: http://muninn-mcp:8080
+    description: "Muninn — Kristian's personality, preferences, goals, dreams, calendar (read-only)"
