@@ -49,6 +49,12 @@ app.use((req, res, next) => (MCP_PATH_RE.test(req.path) ? next() : form(req, res
 // Health (no auth — used by Docker healthcheck inside the container)
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
+// /api/health — richer surface for Yggdrasil's deploy-lag monitor: reports the running
+// build commit so the dashboard can compare it against the latest on main.
+app.get("/api/health", (_req, res) =>
+  res.json({ status: "ok", build: { commit: process.env.BUILD_COMMIT ?? "unknown" } }),
+);
+
 // Authorization Server (root paths: /.well-known/oauth-authorization-server, /authorize, /token, /register, /oauth/...)
 app.use(authServerRouter(cfg, store));
 

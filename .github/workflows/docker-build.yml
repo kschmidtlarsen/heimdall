@@ -38,6 +38,8 @@ jobs:
           tags: |
             ghcr.io/kschmidtlarsen/heimdall:latest
             ghcr.io/kschmidtlarsen/heimdall:${{ github.sha }}
+          build-args: |
+            BUILD_COMMIT=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64

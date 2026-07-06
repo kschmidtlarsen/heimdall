@@ -25,6 +25,11 @@ ENV PORT=8080
 ENV HOST=0.0.0.0
 ENV CONFIG_PATH=/etc/heimdall/config.yml
 
+# Build metadata — surfaced at /api/health so Yggdrasil's deploy-lag monitor
+# can compare the running commit against the latest on main.
+ARG BUILD_COMMIT=unknown
+ENV BUILD_COMMIT=${BUILD_COMMIT}
+
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
