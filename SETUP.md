@@ -1,6 +1,6 @@
 # Heimdall — First-time setup
 
-Step-by-step to bring heimdall online and connect Claude Desktop to the first two MCPs (`cos-mcp`, `kanban-mcp`). Single hostname (`heimdall.exe.pm`) — path-based routing for each MCP.
+Step-by-step to bring heimdall online and connect Claude Desktop to the first three MCPs (`cos-mcp`, `kanban-mcp`, `muninn`). Single hostname (`heimdall.exe.pm`) — path-based routing for each MCP.
 
 ## 1. Register the GitHub OAuth App  *(you)*
 
@@ -82,6 +82,7 @@ curl -s https://heimdall.exe.pm/.well-known/oauth-authorization-server | jq .
 # Resource metadata per MCP
 curl -s https://heimdall.exe.pm/.well-known/oauth-protected-resource/cos-mcp | jq .
 curl -s https://heimdall.exe.pm/.well-known/oauth-protected-resource/kanban-mcp | jq .
+curl -s https://heimdall.exe.pm/.well-known/oauth-protected-resource/muninn | jq .
 
 # Unauthenticated hit returns 401 with WWW-Authenticate
 curl -i https://heimdall.exe.pm/cos-mcp/mcp
@@ -93,10 +94,10 @@ Expected: 401 with `WWW-Authenticate: Bearer resource_metadata="https://heimdall
 
 Claude Desktop → **Settings → Connectors → + Add custom connector**. For each MCP:
 
-| Field | `cos-mcp` | `kanban-mcp` |
-|---|---|---|
-| URL | `https://heimdall.exe.pm/cos-mcp/mcp` | `https://heimdall.exe.pm/kanban-mcp/mcp` |
-| Advanced settings | (leave empty — DCR handles it) | (leave empty) |
+| Field | `cos-mcp` | `kanban-mcp` | `muninn` |
+|---|---|---|---|
+| URL | `https://heimdall.exe.pm/cos-mcp/mcp` | `https://heimdall.exe.pm/kanban-mcp/mcp` | `https://heimdall.exe.pm/muninn/mcp` |
+| Advanced settings | (leave empty — DCR handles it) | (leave empty) | (leave empty) |
 
 Claude will:
 1. Register itself dynamically (no client_id needed)
@@ -109,6 +110,7 @@ Claude will:
 
 - `cos-mcp` → ask Claude to "look up person X" or "get my writing style". Should work.
 - `kanban-mcp` → ask Claude to "list cards on the kanban board". Should work, but **any write attempt should fail** while `KANBAN_WRITE_ENABLED=false`.
+- `muninn` → ask Claude to "get my personality profile" or "what's on my calendar". Should work (read-only).
 
 If both work, Phase 1 is done. Tell me when you're ready to re-enable kanban writes (Phase 2).
 
