@@ -29,3 +29,6 @@ mcps:
   muninn:
     upstream: http://muninn-mcp:8080
     description: "Muninn — Kristian's personality, preferences, goals, dreams, calendar (read-only)"
+  unraid:
+    upstream: http://unraid-mcp:8080
+    description: "Unraid server — system, array/parity, disks, Docker, VMs, notifications, telemetry (read-only viewer key)"
